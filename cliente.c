@@ -11,8 +11,10 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+#define MAX_NOMBRE 50  // Tamaño máximo del nombre del usuario
 #define MAX_MENSAJE 1024
-char nombre_usuario[50];
+
+char nombre_usuario[MAX_NOMBRE];
 int sockfd;
 
 void *recibir_mensajes(void *arg) {
@@ -21,7 +23,7 @@ void *recibir_mensajes(void *arg) {
         memset(buffer, 0, sizeof(buffer));
         int len = recv(sockfd, buffer, sizeof(buffer), 0);
         if (len > 0) {
-            printf("\n%s\n> ", buffer);
+            printf("\n%s\n> ", buffer);  // Imprime el mensaje en una línea limpia y deja el prompt listo
             fflush(stdout);
         }
     }
@@ -34,6 +36,7 @@ void mostrar_menu() {
     printf("2. Cambiar estado (/status ACTIVO/OCUPADO/INACTIVO)\n");
     printf("3. Salir del chat (/exit)\n");
     printf("4. Listar usuarios conectados (/list)\n");
+    printf("5. Enviar mensaje privado (/msg <usuario> <mensaje>)\n");
     printf("Seleccione una opción: ");
 }
 
@@ -88,6 +91,36 @@ int main(int argc, char *argv[]) {
             break;
         } else if (opcion == 4) {
             send(sockfd, "/list", strlen("/list"), 0);
+
+            // Esperar la respuesta del servidor antes de mostrar el menú nuevamente
+            char respuesta[MAX_MENSAJE];
+            memset(respuesta, 0, sizeof(respuesta));
+            int len = recv(sockfd, respuesta, sizeof(respuesta), 0);
+            if (len > 0) {
+                printf("\n%s\n", respuesta);
+                fflush(stdout);
+            }
+        } else if (opcion == 5) {
+            char destinatario[MAX_NOMBRE], mensaje_privado[MAX_MENSAJE];
+            printf("Ingrese el nombre del destinatario: ");
+            fgets(destinatario, MAX_NOMBRE, stdin);
+            destinatario[strcspn(destinatario, "\n")] = 0;
+
+            printf("Ingrese el mensaje: ");
+            fgets(mensaje_privado, MAX_MENSAJE, stdin);
+            mensaje_privado[strcspn(mensaje_privado, "\n")] = 0;
+
+            char comando[MAX_MENSAJE];
+            snprintf(comando, sizeof(comando), "/msg %s %s", destinatario, mensaje_privado);
+            send(sockfd, comando, strlen(comando), 0);
+
+            char respuesta[MAX_MENSAJE];
+            memset(respuesta, 0, sizeof(respuesta));
+            int len = recv(sockfd, respuesta, sizeof(respuesta), 0);
+            if (len > 0) {
+                printf("\n%s\n", respuesta);
+                fflush(stdout);
+            }
         } else {
             printf("Opción inválida.\n");
         }

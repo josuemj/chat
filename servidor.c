@@ -45,7 +45,6 @@ void *manejar_cliente(void *arg) {
         int bytes_recibidos = recv(cliente->socket, buffer, sizeof(buffer), 0);
         if (bytes_recibidos <= 0) break;
 
-        // Manejo de comandos especiales
         if (strncmp(buffer, "/status", 7) == 0) {
             char nuevo_estado[20];
             sscanf(buffer, "/status %s", nuevo_estado);
@@ -72,6 +71,28 @@ void *manejar_cliente(void *arg) {
             pthread_mutex_unlock(&mutex_clientes);
 
             send(cliente->socket, lista, strlen(lista), 0);
+        } else if (strncmp(buffer, "/msg", 4) == 0) {
+            char destinatario[MAX_NOMBRE], mensaje[MAX_MENSAJE];
+            sscanf(buffer, "/msg %s %[^\n]", destinatario, mensaje);
+
+            int encontrado = 0;
+            pthread_mutex_lock(&mutex_clientes);
+            for (int i = 0; i < MAX_CLIENTES; i++) {
+                if (clientes[i] && strcmp(clientes[i]->nombre, destinatario) == 0) {
+                    char mensaje_privado[MAX_MENSAJE + MAX_NOMBRE];
+                    snprintf(mensaje_privado, sizeof(mensaje_privado), "[PRIVADO] %s: %s\n", cliente->nombre, mensaje);
+                    send(clientes[i]->socket, mensaje_privado, strlen(mensaje_privado), 0);
+                    encontrado = 1;
+                    break;
+                }
+            }
+            pthread_mutex_unlock(&mutex_clientes);
+
+            if (!encontrado) {
+                char respuesta[MAX_MENSAJE];
+                snprintf(respuesta, sizeof(respuesta), "[ERROR] El usuario %s no está conectado. No se pudo enviar el mensaje.\n", destinatario);
+                send(cliente->socket, respuesta, strlen(respuesta), 0);
+            }
         } else {
             snprintf(mensaje_formateado, sizeof(mensaje_formateado), "%s: %s\n", cliente->nombre, buffer);
             printf("%s", mensaje_formateado);
