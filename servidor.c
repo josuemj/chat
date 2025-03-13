@@ -58,6 +58,20 @@ void *manejar_cliente(void *arg) {
             printf("%s", mensaje_formateado);
             broadcast(mensaje_formateado, cliente->socket);
             break;
+        } else if (strncmp(buffer, "/list", 5) == 0) {
+            char lista[MAX_MENSAJE] = "[INFO] Usuarios conectados:\n";
+            
+            pthread_mutex_lock(&mutex_clientes);
+            for (int i = 0; i < MAX_CLIENTES; i++) {
+                if (clientes[i]) {
+                    char usuario_info[100];
+                    snprintf(usuario_info, sizeof(usuario_info), "- %s (%s)\n", clientes[i]->nombre, clientes[i]->estado);
+                    strcat(lista, usuario_info);
+                }
+            }
+            pthread_mutex_unlock(&mutex_clientes);
+
+            send(cliente->socket, lista, strlen(lista), 0);
         } else {
             snprintf(mensaje_formateado, sizeof(mensaje_formateado), "%s: %s\n", cliente->nombre, buffer);
             printf("%s", mensaje_formateado);

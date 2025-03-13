@@ -33,6 +33,7 @@ void mostrar_menu() {
     printf("1. Enviar mensaje al chat general\n");
     printf("2. Cambiar estado (/status ACTIVO/OCUPADO/INACTIVO)\n");
     printf("3. Salir del chat (/exit)\n");
+    printf("4. Listar usuarios conectados (/list)\n");
     printf("Seleccione una opción: ");
 }
 
@@ -85,6 +86,8 @@ int main(int argc, char *argv[]) {
             printf("Desconectado.\n");
             close(sockfd);
             break;
+        } else if (opcion == 4) {
+            send(sockfd, "/list", strlen("/list"), 0);
         } else {
             printf("Opción inválida.\n");
         }
