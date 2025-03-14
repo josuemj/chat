@@ -41,11 +41,9 @@ void broadcast_json(cJSON *json, int remitente_socket) {
 
 void enviar_json(int socket, cJSON *json) {
     char *mensaje = cJSON_PrintUnformatted(json);
-    printf("[DEBUG] Enviando a cliente: %s\n", mensaje);  // Nueva línea de depuración
     send(socket, mensaje, strlen(mensaje), 0);
     free(mensaje);
 }
-
 
 void *manejar_cliente(void *arg) {
     struct Cliente *cliente = (struct Cliente *)arg;
@@ -54,23 +52,13 @@ void *manejar_cliente(void *arg) {
     while (1) {
         memset(buffer, 0, sizeof(buffer));
         int bytes_recibidos = recv(cliente->socket, buffer, sizeof(buffer), 0);
-        if (bytes_recibidos <= 0) {
-            printf("[INFO] Cliente desconectado: %s\n", cliente->nombre);
-            break;
-        }
-
-        printf("[DEBUG] Mensaje recibido: %s\n", buffer);
+        if (bytes_recibidos <= 0) break;
 
         cJSON *json = cJSON_Parse(buffer);
-        if (!json) {
-            printf("[ERROR] Error al parsear JSON.\n");
-            continue;
-        }
+        if (!json) continue;
 
         const char *accion = cJSON_GetObjectItem(json, "accion")->valuestring;
-        printf("[INFO] Acción recibida: %s\n", accion);
 
-        // Manejo de REGISTRO
         if (strcmp(accion, "REGISTRO") == 0) {
             const char *usuario = cJSON_GetObjectItem(json, "usuario")->valuestring;
             const char *ip = cJSON_GetObjectItem(json, "direccionIP")->valuestring;
@@ -88,50 +76,47 @@ void *manejar_cliente(void *arg) {
                 strcpy(cliente->nombre, usuario);
                 strcpy(cliente->ip, ip);
                 strcpy(cliente->estado, "ACTIVO");
-            
+
                 for (int i = 0; i < MAX_CLIENTES; i++) {
                     if (clientes[i] == NULL) {
                         clientes[i] = cliente;
                         break;
                     }
                 }
-            
-                // Enviar solo una respuesta con "accion"
+
                 cJSON *respuesta = cJSON_CreateObject();
                 cJSON_AddStringToObject(respuesta, "accion", "INFO");
                 cJSON_AddStringToObject(respuesta, "mensaje", "Registro exitoso");
                 enviar_json(cliente->socket, respuesta);
                 cJSON_Delete(respuesta);
             } else {
-                // Enviar error si el usuario ya está registrado
                 cJSON *error = cJSON_CreateObject();
                 cJSON_AddStringToObject(error, "accion", "ERROR");
                 cJSON_AddStringToObject(error, "mensaje", "Nombre o dirección duplicado");
                 enviar_json(cliente->socket, error);
                 cJSON_Delete(error);
             }
-            
-
-            // Depuración: Mostrar los usuarios conectados
-            printf("[DEBUG] Lista de usuarios actuales:\n");
-            for (int i = 0; i < MAX_CLIENTES; i++) {
-                if (clientes[i]) {
-                    printf("- %s\n", clientes[i]->nombre);
-                }
-            }
-
             pthread_mutex_unlock(&mutex_clientes);
         } 
         else if (strcmp(accion, "EXIT") == 0) {
-            printf("[INFO] %s se ha desconectado.\n", cliente->nombre);
+                pthread_mutex_lock(&mutex_clientes);
+                for (int i = 0; i < MAX_CLIENTES; i++) {
+                    if (clientes[i] == cliente) {
+                        clientes[i] = NULL;
+                        break;
+                    }
+                }
+                pthread_mutex_unlock(&mutex_clientes);
             
-            cJSON *mensaje = cJSON_CreateObject();
-            cJSON_AddStringToObject(mensaje, "accion", "INFO");
-            cJSON_AddStringToObject(mensaje, "mensaje", cliente->nombre);
-            broadcast_json(mensaje, cliente->socket);
-            cJSON_Delete(mensaje);
+                cJSON *mensaje = cJSON_CreateObject();
+                cJSON_AddStringToObject(mensaje, "accion", "INFO");
+                cJSON_AddStringToObject(mensaje, "mensaje", cliente->nombre);
+                broadcast_json(mensaje, cliente->socket);
+                cJSON_Delete(mensaje);
             
-            break;
+                close(cliente->socket);
+                free(cliente);
+                pthread_exit(NULL);           
         } 
         else if (strcmp(accion, "BROADCAST") == 0) {
             const char *mensaje = cJSON_GetObjectItem(json, "mensaje")->valuestring;
@@ -181,7 +166,7 @@ void *manejar_cliente(void *arg) {
             cJSON *lista_json = cJSON_CreateObject();
             cJSON_AddStringToObject(lista_json, "accion", "LISTA");
             cJSON *usuarios_array = cJSON_CreateArray();
-        
+
             pthread_mutex_lock(&mutex_clientes);
             for (int i = 0; i < MAX_CLIENTES; i++) {
                 if (clientes[i]) {
@@ -189,24 +174,15 @@ void *manejar_cliente(void *arg) {
                 }
             }
             pthread_mutex_unlock(&mutex_clientes);
-        
+
             cJSON_AddItemToObject(lista_json, "usuarios", usuarios_array);
-        
-            // Depuración: Imprimir JSON antes de enviarlo
-            char *mensaje_debug = cJSON_Print(lista_json);
-            printf("[DEBUG] Enviando lista de usuarios: %s\n", mensaje_debug);
-            free(mensaje_debug);
-        
             enviar_json(cliente->socket, lista_json);
             cJSON_Delete(lista_json);
         }
 
-        
-
         cJSON_Delete(json);
     }
 
-    // Eliminar usuario de la lista al desconectarse
     pthread_mutex_lock(&mutex_clientes);
     for (int i = 0; i < MAX_CLIENTES; i++) {
         if (clientes[i] == cliente) {
@@ -215,12 +191,10 @@ void *manejar_cliente(void *arg) {
         }
     }
     pthread_mutex_unlock(&mutex_clientes);
-
     close(cliente->socket);
     free(cliente);
     pthread_exit(NULL);
 }
-
 
 int main() {
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -240,24 +214,11 @@ int main() {
         socklen_t cliente_len = sizeof(cliente_addr);
         int cliente_socket = accept(server_socket, (struct sockaddr *)&cliente_addr, &cliente_len);
 
-        if (cliente_socket < 0) {
-            printf("[ERROR] No se pudo aceptar la conexión.\n");
-            continue;
-        }
-
-        // Mostrar la IP del cliente conectado
-        char ip_cliente[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &cliente_addr.sin_addr, ip_cliente, INET_ADDRSTRLEN);
-        printf("[INFO] Cliente conectado desde %s\n", ip_cliente);
-
         struct Cliente *nuevo_cliente = (struct Cliente *)malloc(sizeof(struct Cliente));
         nuevo_cliente->socket = cliente_socket;
-        strcpy(nuevo_cliente->estado, "ACTIVO");
-        strcpy(nuevo_cliente->ip, ip_cliente);
 
         pthread_t hilo;
         pthread_create(&hilo, NULL, manejar_cliente, (void *)nuevo_cliente);
     }
     return 0;
 }
-

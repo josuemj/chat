@@ -20,6 +20,7 @@ int sockfd;
 
 void *recibir_mensajes(void *arg) {
     char buffer[MAX_MENSAJE];
+
     while (1) {
         memset(buffer, 0, sizeof(buffer));
         int len = recv(sockfd, buffer, sizeof(buffer), 0);
@@ -29,21 +30,14 @@ void *recibir_mensajes(void *arg) {
             exit(1);
         }
 
-        printf("\n[DEBUG] Mensaje recibido: %s\n", buffer);
-
         cJSON *json = cJSON_Parse(buffer);
-        if (!json) {
-            printf("[ERROR] Error al parsear JSON.\n");
-            continue;
-        }
+        if (!json) continue;
 
         cJSON *accion_json = cJSON_GetObjectItem(json, "accion");
         if (!accion_json || !cJSON_IsString(accion_json)) {
             cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
             if (mensaje && cJSON_IsString(mensaje)) {
                 printf("[INFO] %s\n", mensaje->valuestring);
-            } else {
-                printf("[ERROR] JSON recibido sin 'accion' ni 'mensaje'.\n");
             }
             cJSON_Delete(json);
             continue;
@@ -52,25 +46,19 @@ void *recibir_mensajes(void *arg) {
         const char *accion = accion_json->valuestring;
 
         if (strcmp(accion, "BROADCAST") == 0) {
-            cJSON *nombre_emisor = cJSON_GetObjectItem(json, "nombre_emisor");
-            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
-
-            if (nombre_emisor && mensaje && cJSON_IsString(nombre_emisor) && cJSON_IsString(mensaje)) {
-                printf("[CHAT] %s: %s\n", nombre_emisor->valuestring, mensaje->valuestring);
-            }
+            printf("[CHAT] %s: %s\n",
+                   cJSON_GetObjectItem(json, "nombre_emisor")->valuestring,
+                   cJSON_GetObjectItem(json, "mensaje")->valuestring);
         } 
         else if (strcmp(accion, "DM") == 0) {
-            cJSON *nombre_emisor = cJSON_GetObjectItem(json, "nombre_emisor");
-            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
-
-            if (nombre_emisor && mensaje && cJSON_IsString(nombre_emisor) && cJSON_IsString(mensaje)) {
-                printf("[PRIVADO] %s: %s\n", nombre_emisor->valuestring, mensaje->valuestring);
-            }
+            printf("[PRIVADO] %s: %s\n",
+                   cJSON_GetObjectItem(json, "nombre_emisor")->valuestring,
+                   cJSON_GetObjectItem(json, "mensaje")->valuestring);
         } 
         else if (strcmp(accion, "LISTA") == 0) {
+            printf("\n[INFO] Usuarios conectados:\n");
             cJSON *usuarios = cJSON_GetObjectItem(json, "usuarios");
 
-            printf("\n[INFO] Usuarios conectados:\n");
             if (!usuarios || !cJSON_IsArray(usuarios)) {
                 printf("Error al recibir la lista de usuarios.\n");
             } else if (cJSON_GetArraySize(usuarios) == 0) {
@@ -80,21 +68,13 @@ void *recibir_mensajes(void *arg) {
                     printf("- %s\n", cJSON_GetArrayItem(usuarios, i)->valuestring);
                 }
             }
+            printf("\n");
         } 
         else if (strcmp(accion, "INFO") == 0) {
-            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
-            if (mensaje && cJSON_IsString(mensaje)) {
-                printf("[INFO] %s\n", mensaje->valuestring);
-            }
+            printf("[INFO] %s\n", cJSON_GetObjectItem(json, "mensaje")->valuestring);
         } 
         else if (strcmp(accion, "ERROR") == 0) {
-            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
-            if (mensaje && cJSON_IsString(mensaje)) {
-                printf("[ERROR] %s\n", mensaje->valuestring);
-            }
-        } 
-        else {
-            printf("[ERROR] Acción desconocida: %s\n", accion);
+            printf("[ERROR] %s\n", cJSON_GetObjectItem(json, "mensaje")->valuestring);
         }
 
         cJSON_Delete(json);
@@ -103,7 +83,6 @@ void *recibir_mensajes(void *arg) {
     }
     return NULL;
 }
-
 
 void enviar_json(cJSON *json) {
     char *mensaje = cJSON_PrintUnformatted(json);
@@ -150,8 +129,21 @@ int main(int argc, char *argv[]) {
     cJSON_AddStringToObject(registro, "direccionIP", ip_servidor);
     enviar_json(registro);
     cJSON_Delete(registro);
-    printf("[DEBUG] Se envió el mensaje de registro para %s\n", nombre_usuario);
-
+    
+    // Esperar confirmación del servidor
+    char buffer[MAX_MENSAJE];
+    memset(buffer, 0, sizeof(buffer));
+    recv(sockfd, buffer, sizeof(buffer), 0);
+    
+    cJSON *respuesta = cJSON_Parse(buffer);
+    if (respuesta) {
+        cJSON *response = cJSON_GetObjectItem(respuesta, "response");
+        if (response && cJSON_IsString(response) && strcmp(response->valuestring, "OK") == 0) {
+            printf("[INFO] Registro exitoso\n");
+        }
+        cJSON_Delete(respuesta);
+    }
+    
 
     pthread_t thread_id;
     pthread_create(&thread_id, NULL, recibir_mensajes, NULL);
@@ -193,13 +185,61 @@ int main(int argc, char *argv[]) {
             cJSON_AddStringToObject(json, "mensaje", mensaje);
             enviar_json(json);
             cJSON_Delete(json);
-        } 
+            
+            // Esperar respuesta del servidor ANTES de mostrar el menú
+            char buffer[MAX_MENSAJE];
+            memset(buffer, 0, sizeof(buffer));
+            recv(sockfd, buffer, sizeof(buffer), 0);
+            
+            // Procesar la respuesta
+            cJSON *respuesta = cJSON_Parse(buffer);
+            if (respuesta) {
+                cJSON *accion_json = cJSON_GetObjectItem(respuesta, "accion");
+                if (accion_json && cJSON_IsString(accion_json)) {
+                    if (strcmp(accion_json->valuestring, "ERROR") == 0) {
+                        printf("[ERROR] %s\n", cJSON_GetObjectItem(respuesta, "mensaje")->valuestring);
+                    } else if (strcmp(accion_json->valuestring, "INFO") == 0) {
+                        printf("[INFO] %s\n", cJSON_GetObjectItem(respuesta, "mensaje")->valuestring);
+                    }
+                }
+                cJSON_Delete(respuesta);
+            }
+            
+        }   
         else if (opcion == 3) {  // Listar usuarios conectados
             cJSON *json = cJSON_CreateObject();
             cJSON_AddStringToObject(json, "accion", "LISTA");
             cJSON_AddStringToObject(json, "nombre_usuario", nombre_usuario);
             enviar_json(json);
             cJSON_Delete(json);
+            
+            // Esperar respuesta del servidor antes de mostrar el menú
+            char buffer[MAX_MENSAJE];
+            memset(buffer, 0, sizeof(buffer));
+            recv(sockfd, buffer, sizeof(buffer), 0);
+            
+            // Procesar la respuesta
+            cJSON *respuesta = cJSON_Parse(buffer);
+            if (respuesta) {
+                cJSON *accion_json = cJSON_GetObjectItem(respuesta, "accion");
+                if (accion_json && cJSON_IsString(accion_json) && strcmp(accion_json->valuestring, "LISTA") == 0) {
+                    printf("\n[INFO] Usuarios conectados:\n");
+                    cJSON *usuarios = cJSON_GetObjectItem(respuesta, "usuarios");
+            
+                    if (!usuarios || !cJSON_IsArray(usuarios)) {
+                        printf("Error al recibir la lista de usuarios.\n");
+                    } else if (cJSON_GetArraySize(usuarios) == 0) {
+                        printf("No hay usuarios conectados.\n");
+                    } else {
+                        for (int i = 0; i < cJSON_GetArraySize(usuarios); i++) {
+                            printf("- %s\n", cJSON_GetArrayItem(usuarios, i)->valuestring);
+                        }
+                    }
+                    printf("\n");
+                }
+                cJSON_Delete(respuesta);
+            }
+            
         } 
         else if (opcion == 4) {  // Cambiar estado
             printf("Nuevo estado (ACTIVO/OCUPADO/INACTIVO): ");
