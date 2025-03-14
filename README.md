@@ -14,4 +14,5 @@ gcc cliente.c -o cliente -lpthread
 # Terminal 2, 3, etc.
 ./cliente pepito 127.0.0.1 50213
 ./cliente maria 127.0.0.1 50213
+
 ```
