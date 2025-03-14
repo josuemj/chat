@@ -62,7 +62,7 @@ void *manejar_cliente(void *arg) {
         if (strcmp(accion, "REGISTRO") == 0) {
             const char *usuario = cJSON_GetObjectItem(json, "usuario")->valuestring;
             const char *ip = cJSON_GetObjectItem(json, "direccionIP")->valuestring;
-
+        
             int duplicado = 0;
             pthread_mutex_lock(&mutex_clientes);
             for (int i = 0; i < MAX_CLIENTES; i++) {
@@ -71,33 +71,33 @@ void *manejar_cliente(void *arg) {
                     break;
                 }
             }
-
+        
             if (!duplicado) {
                 strcpy(cliente->nombre, usuario);
                 strcpy(cliente->ip, ip);
                 strcpy(cliente->estado, "ACTIVO");
-
+        
                 for (int i = 0; i < MAX_CLIENTES; i++) {
                     if (clientes[i] == NULL) {
                         clientes[i] = cliente;
                         break;
                     }
                 }
-
+        
                 cJSON *respuesta = cJSON_CreateObject();
-                cJSON_AddStringToObject(respuesta, "accion", "INFO");
-                cJSON_AddStringToObject(respuesta, "mensaje", "Registro exitoso");
+                cJSON_AddStringToObject(respuesta, "response", "OK");  // ✅ Corrige el protocolo
                 enviar_json(cliente->socket, respuesta);
                 cJSON_Delete(respuesta);
             } else {
                 cJSON *error = cJSON_CreateObject();
-                cJSON_AddStringToObject(error, "accion", "ERROR");
-                cJSON_AddStringToObject(error, "mensaje", "Nombre o dirección duplicado");
+                cJSON_AddStringToObject(error, "respuesta", "ERROR");  // ✅ Corrige el protocolo
+                cJSON_AddStringToObject(error, "razon", "Nombre o dirección duplicado");
                 enviar_json(cliente->socket, error);
                 cJSON_Delete(error);
             }
             pthread_mutex_unlock(&mutex_clientes);
-        } 
+        }
+        
         else if (strcmp(accion, "EXIT") == 0) {
                 pthread_mutex_lock(&mutex_clientes);
                 for (int i = 0; i < MAX_CLIENTES; i++) {

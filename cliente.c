@@ -122,28 +122,36 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // Enviar mensaje de registro al servidor
+        // Enviar mensaje de registro al servidor
     cJSON *registro = cJSON_CreateObject();
     cJSON_AddStringToObject(registro, "accion", "REGISTRO");
     cJSON_AddStringToObject(registro, "usuario", nombre_usuario);
     cJSON_AddStringToObject(registro, "direccionIP", ip_servidor);
     enviar_json(registro);
     cJSON_Delete(registro);
-    
+
     // Esperar confirmación del servidor
     char buffer[MAX_MENSAJE];
     memset(buffer, 0, sizeof(buffer));
     recv(sockfd, buffer, sizeof(buffer), 0);
-    
+
     cJSON *respuesta = cJSON_Parse(buffer);
     if (respuesta) {
         cJSON *response = cJSON_GetObjectItem(respuesta, "response");
         if (response && cJSON_IsString(response) && strcmp(response->valuestring, "OK") == 0) {
             printf("[INFO] Registro exitoso\n");
+        } else {
+            cJSON *error = cJSON_GetObjectItem(respuesta, "respuesta");
+            if (error && cJSON_IsString(error) && strcmp(error->valuestring, "ERROR") == 0) {
+                printf("[ERROR] %s\n", cJSON_GetObjectItem(respuesta, "razon")->valuestring);
+                close(sockfd);
+                exit(1);
+            }
         }
         cJSON_Delete(respuesta);
     }
-    
+
+
 
     pthread_t thread_id;
     pthread_create(&thread_id, NULL, recibir_mensajes, NULL);
