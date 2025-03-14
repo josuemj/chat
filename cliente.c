@@ -23,12 +23,17 @@ void *recibir_mensajes(void *arg) {
         memset(buffer, 0, sizeof(buffer));
         int len = recv(sockfd, buffer, sizeof(buffer), 0);
         if (len > 0) {
-            printf("\n%s\n> ", buffer);  // Imprime el mensaje en una línea limpia y deja el prompt listo
+            printf("\n%s\n", buffer);  // Muestra el mensaje en una nueva línea
+            fflush(stdout);
+            
+            // Volver a imprimir el prompt solo si el usuario no está escribiendo
+            printf("> ");
             fflush(stdout);
         }
     }
     return NULL;
 }
+
 
 void mostrar_menu() {
     printf("\n---- MENÚ ----\n");
@@ -105,15 +110,16 @@ int main(int argc, char *argv[]) {
             printf("Ingrese el nombre del destinatario: ");
             fgets(destinatario, MAX_NOMBRE, stdin);
             destinatario[strcspn(destinatario, "\n")] = 0;
-
+        
             printf("Ingrese el mensaje: ");
             fgets(mensaje_privado, MAX_MENSAJE, stdin);
             mensaje_privado[strcspn(mensaje_privado, "\n")] = 0;
-
+        
             char comando[MAX_MENSAJE];
             snprintf(comando, sizeof(comando), "/msg %s %s", destinatario, mensaje_privado);
             send(sockfd, comando, strlen(comando), 0);
-
+        
+            // Esperar la respuesta del servidor antes de continuar
             char respuesta[MAX_MENSAJE];
             memset(respuesta, 0, sizeof(respuesta));
             int len = recv(sockfd, respuesta, sizeof(respuesta), 0);
@@ -121,7 +127,8 @@ int main(int argc, char *argv[]) {
                 printf("\n%s\n", respuesta);
                 fflush(stdout);
             }
-        } else {
+        }
+         else {
             printf("Opción inválida.\n");
         }
     }

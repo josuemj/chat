@@ -82,6 +82,11 @@ void *manejar_cliente(void *arg) {
                     char mensaje_privado[MAX_MENSAJE + MAX_NOMBRE];
                     snprintf(mensaje_privado, sizeof(mensaje_privado), "[PRIVADO] %s: %s\n", cliente->nombre, mensaje);
                     send(clientes[i]->socket, mensaje_privado, strlen(mensaje_privado), 0);
+                    
+                    char confirmacion[MAX_MENSAJE];
+                    snprintf(confirmacion, sizeof(confirmacion), "[INFO] Mensaje enviado a %s.\n", destinatario);
+                    send(cliente->socket, confirmacion, strlen(confirmacion), 0);
+                    
                     encontrado = 1;
                     break;
                 }
