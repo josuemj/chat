@@ -23,50 +23,87 @@ void *recibir_mensajes(void *arg) {
     while (1) {
         memset(buffer, 0, sizeof(buffer));
         int len = recv(sockfd, buffer, sizeof(buffer), 0);
-        if (len > 0) {
-            cJSON *json = cJSON_Parse(buffer);
-            if (json) {
-                const char *accion = cJSON_GetObjectItem(json, "accion")->valuestring;
-                printf("\n");
-
-                if (strcmp(accion, "BROADCAST") == 0) {
-                    printf("[CHAT] %s: %s\n",
-                           cJSON_GetObjectItem(json, "nombre_emisor")->valuestring,
-                           cJSON_GetObjectItem(json, "mensaje")->valuestring);
-                } else if (strcmp(accion, "DM") == 0) {
-                    printf("[PRIVADO] %s: %s\n",
-                           cJSON_GetObjectItem(json, "nombre_emisor")->valuestring,
-                           cJSON_GetObjectItem(json, "mensaje")->valuestring);
-                } else if (strcmp(accion, "LISTA") == 0) {
-                    printf("\n[INFO] Usuarios conectados:\n");
-                    cJSON *usuarios = cJSON_GetObjectItem(json, "usuarios");
-                
-                    if (!usuarios || !cJSON_IsArray(usuarios)) {  
-                        printf("Error al recibir la lista de usuarios.\n");
-                    } else if (cJSON_GetArraySize(usuarios) == 0) {
-                        printf("No hay usuarios conectados.\n");
-                    } else {
-                        for (int i = 0; i < cJSON_GetArraySize(usuarios); i++) {
-                            printf("- %s\n", cJSON_GetArrayItem(usuarios, i)->valuestring);
-                        }
-                    }
-                    printf("\n");
-                }
-                
-                 else if (strcmp(accion, "INFO") == 0) {
-                    printf("[INFO] %s\n", cJSON_GetObjectItem(json, "mensaje")->valuestring);
-                } else if (strcmp(accion, "ERROR") == 0) {
-                    printf("[ERROR] %s\n", cJSON_GetObjectItem(json, "mensaje")->valuestring);
-                }
-
-                cJSON_Delete(json);
-            }
-            fflush(stdout);
-            printf("> ");
+        if (len <= 0) {
+            printf("[INFO] Conexión cerrada por el servidor.\n");
+            close(sockfd);
+            exit(1);
         }
+
+        printf("\n[DEBUG] Mensaje recibido: %s\n", buffer);
+
+        cJSON *json = cJSON_Parse(buffer);
+        if (!json) {
+            printf("[ERROR] Error al parsear JSON.\n");
+            continue;
+        }
+
+        cJSON *accion_json = cJSON_GetObjectItem(json, "accion");
+        if (!accion_json || !cJSON_IsString(accion_json)) {
+            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
+            if (mensaje && cJSON_IsString(mensaje)) {
+                printf("[INFO] %s\n", mensaje->valuestring);
+            } else {
+                printf("[ERROR] JSON recibido sin 'accion' ni 'mensaje'.\n");
+            }
+            cJSON_Delete(json);
+            continue;
+        }
+
+        const char *accion = accion_json->valuestring;
+
+        if (strcmp(accion, "BROADCAST") == 0) {
+            cJSON *nombre_emisor = cJSON_GetObjectItem(json, "nombre_emisor");
+            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
+
+            if (nombre_emisor && mensaje && cJSON_IsString(nombre_emisor) && cJSON_IsString(mensaje)) {
+                printf("[CHAT] %s: %s\n", nombre_emisor->valuestring, mensaje->valuestring);
+            }
+        } 
+        else if (strcmp(accion, "DM") == 0) {
+            cJSON *nombre_emisor = cJSON_GetObjectItem(json, "nombre_emisor");
+            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
+
+            if (nombre_emisor && mensaje && cJSON_IsString(nombre_emisor) && cJSON_IsString(mensaje)) {
+                printf("[PRIVADO] %s: %s\n", nombre_emisor->valuestring, mensaje->valuestring);
+            }
+        } 
+        else if (strcmp(accion, "LISTA") == 0) {
+            cJSON *usuarios = cJSON_GetObjectItem(json, "usuarios");
+
+            printf("\n[INFO] Usuarios conectados:\n");
+            if (!usuarios || !cJSON_IsArray(usuarios)) {
+                printf("Error al recibir la lista de usuarios.\n");
+            } else if (cJSON_GetArraySize(usuarios) == 0) {
+                printf("No hay usuarios conectados.\n");
+            } else {
+                for (int i = 0; i < cJSON_GetArraySize(usuarios); i++) {
+                    printf("- %s\n", cJSON_GetArrayItem(usuarios, i)->valuestring);
+                }
+            }
+        } 
+        else if (strcmp(accion, "INFO") == 0) {
+            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
+            if (mensaje && cJSON_IsString(mensaje)) {
+                printf("[INFO] %s\n", mensaje->valuestring);
+            }
+        } 
+        else if (strcmp(accion, "ERROR") == 0) {
+            cJSON *mensaje = cJSON_GetObjectItem(json, "mensaje");
+            if (mensaje && cJSON_IsString(mensaje)) {
+                printf("[ERROR] %s\n", mensaje->valuestring);
+            }
+        } 
+        else {
+            printf("[ERROR] Acción desconocida: %s\n", accion);
+        }
+
+        cJSON_Delete(json);
+        fflush(stdout);
+        printf("> ");
     }
     return NULL;
 }
+
 
 void enviar_json(cJSON *json) {
     char *mensaje = cJSON_PrintUnformatted(json);

@@ -41,9 +41,11 @@ void broadcast_json(cJSON *json, int remitente_socket) {
 
 void enviar_json(int socket, cJSON *json) {
     char *mensaje = cJSON_PrintUnformatted(json);
+    printf("[DEBUG] Enviando a cliente: %s\n", mensaje);  // Nueva línea de depuración
     send(socket, mensaje, strlen(mensaje), 0);
     free(mensaje);
 }
+
 
 void *manejar_cliente(void *arg) {
     struct Cliente *cliente = (struct Cliente *)arg;
@@ -86,31 +88,29 @@ void *manejar_cliente(void *arg) {
                 strcpy(cliente->nombre, usuario);
                 strcpy(cliente->ip, ip);
                 strcpy(cliente->estado, "ACTIVO");
-
+            
                 for (int i = 0; i < MAX_CLIENTES; i++) {
                     if (clientes[i] == NULL) {
                         clientes[i] = cliente;
                         break;
                     }
                 }
-
+            
+                // Enviar solo una respuesta con "accion"
                 cJSON *respuesta = cJSON_CreateObject();
-                cJSON_AddStringToObject(respuesta, "response", "OK");
+                cJSON_AddStringToObject(respuesta, "accion", "INFO");
+                cJSON_AddStringToObject(respuesta, "mensaje", "Registro exitoso");
                 enviar_json(cliente->socket, respuesta);
                 cJSON_Delete(respuesta);
-
-                cJSON *notificacion = cJSON_CreateObject();
-                cJSON_AddStringToObject(notificacion, "accion", "INFO");
-                cJSON_AddStringToObject(notificacion, "mensaje", usuario);
-                broadcast_json(notificacion, cliente->socket);
-                cJSON_Delete(notificacion);
             } else {
+                // Enviar error si el usuario ya está registrado
                 cJSON *error = cJSON_CreateObject();
-                cJSON_AddStringToObject(error, "respuesta", "ERROR");
-                cJSON_AddStringToObject(error, "razon", "Nombre o dirección duplicado");
+                cJSON_AddStringToObject(error, "accion", "ERROR");
+                cJSON_AddStringToObject(error, "mensaje", "Nombre o dirección duplicado");
                 enviar_json(cliente->socket, error);
                 cJSON_Delete(error);
             }
+            
 
             // Depuración: Mostrar los usuarios conectados
             printf("[DEBUG] Lista de usuarios actuales:\n");
@@ -200,7 +200,7 @@ void *manejar_cliente(void *arg) {
             enviar_json(cliente->socket, lista_json);
             cJSON_Delete(lista_json);
         }
-        
+
         
 
         cJSON_Delete(json);
