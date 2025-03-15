@@ -2,14 +2,13 @@
 
 ## 🔧 Compilación:
 ```bash
-gcc servidor.c -o servidor -lpthread
-gcc cliente.c -o cliente -lpthread
+gcc servidor.c -o servidor -lpthread -lcjson
+gcc cliente.c -o cliente -lpthread -lcjson
 ```
 
 ## ▶ Ejecución:
 ```bash
-# Terminal 1
-./servidor 50213
+./servidor
 
 # Terminal 2, 3, etc.
 ./cliente pepito 127.0.0.1 50213
