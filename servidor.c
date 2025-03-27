@@ -161,6 +161,55 @@ DWORD WINAPI manejar_cliente(LPVOID arg) {
                 printf("[SERVER] DM enviado a %s\n", destinatario);
             }
         }
+
+        else if (strcmp(accion, "MOSTRAR") == 0) {
+            const char *usuario_buscado = cJSON_GetObjectItem(json, "usuario")->valuestring;
+            int encontrado = 0;
+        
+            WaitForSingleObject(mutex_clientes, INFINITE);
+            for (int i = 0; i < MAX_CLIENTES; i++) {
+                if (clientes[i] && strcmp(clientes[i]->nombre, usuario_buscado) == 0) {
+                    encontrado = 1;
+                    cJSON *respuesta = cJSON_CreateObject();
+                    cJSON_AddStringToObject(respuesta, "accion", "MOSTRAR");
+                    cJSON_AddStringToObject(respuesta, "usuario", clientes[i]->nombre);
+                    cJSON_AddStringToObject(respuesta, "estado", clientes[i]->estado);
+                    enviar_json(cliente->socket, respuesta);
+                    cJSON_Delete(respuesta);
+                    break;
+                }
+            }
+            ReleaseMutex(mutex_clientes);
+        
+            if (!encontrado) {
+                cJSON *error = cJSON_CreateObject();
+                cJSON_AddStringToObject(error, "respuesta", "ERROR");
+                cJSON_AddStringToObject(error, "razon", "USUARIO_NO_ENCONTRADO");
+                enviar_json(cliente->socket, error);
+                cJSON_Delete(error);
+            }
+        }
+        
+
+        else if (strcmp(accion, "ESTADO") == 0) {
+            const char *nuevo_estado = cJSON_GetObjectItem(json, "estado")->valuestring;
+        
+            if (strcmp(cliente->estado, nuevo_estado) == 0) {
+                cJSON *error = cJSON_CreateObject();
+                cJSON_AddStringToObject(error, "respuesta", "ERROR");
+                cJSON_AddStringToObject(error, "razon", "ESTADO_YA_SELECCIONADO");
+                enviar_json(cliente->socket, error);
+                cJSON_Delete(error);
+            } else {
+                strcpy(cliente->estado, nuevo_estado);
+                cJSON *ok = cJSON_CreateObject();
+                cJSON_AddStringToObject(ok, "respuesta", "OK");
+                enviar_json(cliente->socket, ok);
+                cJSON_Delete(ok);
+                printf("[SERVER] Estado actualizado para %s: %s\n", cliente->nombre, cliente->estado);
+            }
+        }
+        
         else if (strcmp(accion, "LISTA") == 0) {
             WaitForSingleObject(mutex_clientes, INFINITE);
             cJSON *usuarios_array = cJSON_CreateArray();
@@ -175,14 +224,17 @@ DWORD WINAPI manejar_cliente(LPVOID arg) {
             }
             ReleaseMutex(mutex_clientes);
 
-            char *usuarios_string = cJSON_PrintUnformatted(usuarios_array);
+            cJSON *usuarios_nombres = cJSON_CreateArray();
+            for (int i = 0; i < MAX_CLIENTES; i++) {
+                if (clientes[i]) {
+                    cJSON_AddItemToArray(usuarios_nombres, cJSON_CreateString(clientes[i]->nombre));
+                }
+            }
             cJSON *respuesta = cJSON_CreateObject();
             cJSON_AddStringToObject(respuesta, "accion", "LISTA");
-            cJSON_AddStringToObject(respuesta, "mensaje", usuarios_string);
+            cJSON_AddItemToObject(respuesta, "usuarios", usuarios_nombres);
             enviar_json(cliente->socket, respuesta);
-            cJSON_Delete(respuesta);
-            cJSON_Delete(usuarios_array);
-            free(usuarios_string);
+            cJSON_Delete(respuesta);            
             printf("[SERVER] Lista enviada a %s\n", cliente->nombre);
         }
 
