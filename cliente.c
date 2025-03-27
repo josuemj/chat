@@ -114,7 +114,9 @@ int main(int argc, char *argv[]) {
     cJSON *registro = cJSON_CreateObject();
     cJSON_AddStringToObject(registro, "tipo", "REGISTRO");
     cJSON_AddStringToObject(registro, "usuario", nombre_usuario);
-    // ON_AddStringToObject(registro, "direccionIP", ip_cliente); ESTA NO DEBE IR
+
+    
+    // ON_AddStringToObject(registro, "direccionIP", ip_cliente); // ESTA NO DEBE IR
     enviar_json(registro);
     cJSON_Delete(registro);
 
